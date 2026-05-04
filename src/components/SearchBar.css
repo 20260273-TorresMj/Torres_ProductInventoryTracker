@@ -1,0 +1,33 @@
+.search-bar {
+  position: relative;
+  margin-bottom: 15px;
+}
+
+.search-bar input {
+  width: 100%;
+  padding: 12px 40px 12px 15px;
+  border: 1px solid #cbd5e0;
+  border-radius: 5px;
+  font-size: 14px;
+}
+
+.search-bar input:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.clear-search {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #a0aec0;
+  font-size: 16px;
+}
+
+.clear-search:hover {
+  color: #718096;
+}
