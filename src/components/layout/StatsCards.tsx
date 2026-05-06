@@ -13,7 +13,9 @@ export const StatsCards: React.FC<StatsCardsProps> = ({ stats }) => {
     { icon: '⚠️', label: 'Low Stock', value: stats.lowStockCount, color: 'warning' },
     { icon: '❌', label: 'Out of Stock', value: stats.outOfStockCount, color: 'danger' },
     { icon: '💵', label: 'MTD Sales', value: formatPHP(stats.monthToDateSales), color: 'info' },
-    { icon: '👥', label: 'Customers', value: stats.totalCustomers, color: 'secondary' }
+    { icon: '👥', label: 'Customers', value: stats.totalCustomers, color: 'secondary' },
+    { icon: '📋', label: 'Pending Orders', value: stats.pendingPurchaseOrders || 0, color: 'warning' },
+    { icon: '🏭', label: 'PO Value', value: formatPHP(stats.totalPurchaseOrdersValue || 0), color: 'primary' }
   ];
 
   return (
@@ -25,7 +27,11 @@ export const StatsCards: React.FC<StatsCardsProps> = ({ stats }) => {
               <div className="stat-icon">{card.icon}</div>
               <div className="stat-info">
                 <h3>{card.label}</h3>
-                <p className="stat-value">{card.value}</p>
+                <p className="stat-value">
+                  {typeof card.value === 'number' && card.label.includes('PHP') 
+                    ? formatPHP(card.value) 
+                    : card.value}
+                </p>
               </div>
             </div>
           ))}

@@ -49,8 +49,10 @@ interface AppContextType {
   updateQuantity: (id: string, newQuantity: number) => void;
   addVendor: (vendor: Omit<Vendor, 'id' | 'rating' | 'isActive'>) => void;
   addCustomer: (customer: Omit<Customer, 'id' | 'loyaltyPoints' | 'totalSpent' | 'lastPurchase' | 'isActive'>) => void;
-  createPurchaseOrder: (po: Omit<PurchaseOrder, 'id' | 'poNumber' | 'status'>) => void;
+  createPurchaseOrder: (po: Omit<PurchaseOrder, 'id' | 'poNumber' | 'status' | 'createdAt' | 'updatedAt'>) => void;
+  updatePurchaseOrderStatus: (id: string, status: PurchaseOrder['status']) => void;
   receivePurchaseOrder: (poId: string) => void;
+  cancelPurchaseOrder: (poId: string) => void;
   createSale: (sale: Omit<Sale, 'id' | 'invoiceNumber' | 'processedBy'>) => void;
 }
 
@@ -144,38 +146,90 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children, currentUser 
     setCustomers([...customers, newCustomer]);
   };
 
-  const createPurchaseOrder = (po: Omit<PurchaseOrder, 'id' | 'poNumber' | 'status'>): void => {
+  const createPurchaseOrder = (po: Omit<PurchaseOrder, 'id' | 'poNumber' | 'status' | 'createdAt' | 'updatedAt'>): void => {
     const newPO: PurchaseOrder = {
       ...po,
       id: Date.now().toString(),
-      poNumber: `PO-${new Date().getFullYear()}-${String(purchaseOrders.length + 1).padStart(3, '0')}`,
+      poNumber: `PO-${new Date().getFullYear()}-${String(purchaseOrders.length + 1).padStart(4, '0')}`,
       status: 'pending',
+      createdAt: new Date(),
+      updatedAt: new Date(),
       items: po.items.map(item => ({ ...item, id: Date.now().toString() }))
     };
     setPurchaseOrders([...purchaseOrders, newPO]);
-    alert(`Purchase Order ${newPO.poNumber} created successfully!`);
+    alert(`✅ Purchase Order ${newPO.poNumber} created successfully!\n\nVendor: ${newPO.vendorName}\nTotal: ₱${newPO.total.toFixed(2)}\nExpected: ${newPO.expectedDelivery.toLocaleDateString()}`);
+  };
+
+  const updatePurchaseOrderStatus = (id: string, status: PurchaseOrder['status']): void => {
+    setPurchaseOrders(purchaseOrders.map(po => 
+      po.id === id 
+        ? { ...po, status, updatedAt: new Date() }
+        : po
+    ));
+    alert(`Purchase Order status updated to ${status.toUpperCase()}`);
   };
 
   const receivePurchaseOrder = (poId: string): void => {
     const po = purchaseOrders.find(p => p.id === poId);
-    if (po && po.status === 'shipped') {
-      const updatedProducts = [...products];
-      po.items.forEach(item => {
-        const product = updatedProducts.find(p => p.id === item.productId);
-        if (product) {
-          product.quantity += item.quantity;
-          product.lastUpdated = new Date();
-        }
-      });
-      setProducts(updatedProducts);
+    if (!po) {
+      alert('Purchase order not found');
+      return;
+    }
+    
+    if (po.status === 'received') {
+      alert('This order has already been received!');
+      return;
+    }
+    
+    if (po.status !== 'shipped') {
+      alert('Please mark the order as shipped before receiving.');
+      return;
+    }
+    
+    // Update product quantities
+    const updatedProducts = [...products];
+    po.items.forEach(item => {
+      const product = updatedProducts.find(p => p.id === item.productId);
+      if (product) {
+        const oldQuantity = product.quantity;
+        product.quantity += item.quantity;
+        product.lastUpdated = new Date();
+        product.cost = item.unitCost; // Update cost to latest purchase price
+        
+        console.log(`📦 Updated ${product.name}: ${oldQuantity} → ${product.quantity} (+${item.quantity})`);
+      } else {
+        console.warn(`Product ${item.productName} not found in inventory`);
+      }
+    });
+    
+    setProducts(updatedProducts);
+    setPurchaseOrders(purchaseOrders.map(p => 
+      p.id === poId 
+        ? { 
+            ...p, 
+            status: 'received', 
+            actualDelivery: new Date(),
+            receivedBy: currentUser?.fullName || 'System',
+            receivedDate: new Date(),
+            updatedAt: new Date()
+          }
+        : p
+    ));
+    
+    alert(`✅ Purchase Order ${po.poNumber} received successfully!\n\n📦 Added ${po.items.reduce((sum, i) => sum + i.quantity, 0)} units to inventory.\n💰 Updated cost prices for ${po.items.length} product(s).`);
+  };
+
+  const cancelPurchaseOrder = (poId: string): void => {
+    const po = purchaseOrders.find(p => p.id === poId);
+    if (!po) return;
+    
+    if (window.confirm(`Are you sure you want to cancel Purchase Order ${po.poNumber}?`)) {
       setPurchaseOrders(purchaseOrders.map(p => 
-        p.id === poId ? { ...p, status: 'received' } : p
+        p.id === poId 
+          ? { ...p, status: 'cancelled', updatedAt: new Date() }
+          : p
       ));
-      alert(`Purchase Order ${po.poNumber} has been received!`);
-    } else if (po && po.status === 'pending') {
-      alert('Please confirm and ship the order first.');
-    } else if (po && po.status === 'received') {
-      alert('This order has already been received.');
+      alert(`Purchase Order ${po.poNumber} has been cancelled.`);
     }
   };
 
@@ -184,7 +238,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children, currentUser 
     for (const item of sale.items) {
       const product = products.find(p => p.id === item.productId);
       if (!product || product.quantity < item.quantity) {
-        alert(`Insufficient stock for ${item.productName}. Available: ${product?.quantity || 0}`);
+        alert(`❌ Insufficient stock for ${item.productName}\nAvailable: ${product?.quantity || 0}\nRequested: ${item.quantity}`);
         return;
       }
     }
@@ -192,7 +246,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children, currentUser 
     const newSale: Sale = {
       ...sale,
       id: Date.now().toString(),
-      invoiceNumber: `INV-${new Date().getFullYear()}-${String(sales.length + 1).padStart(3, '0')}`,
+      invoiceNumber: `INV-${new Date().getFullYear()}-${String(sales.length + 1).padStart(4, '0')}`,
       processedBy: currentUser?.username || 'system'
     };
     
@@ -224,7 +278,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children, currentUser 
       setCustomers(updatedCustomers);
     }
     
-    alert(`Sale ${newSale.invoiceNumber} completed successfully!`);
+    alert(`✅ Sale ${newSale.invoiceNumber} completed successfully!\nCustomer: ${newSale.customerName}\nTotal: ₱${newSale.total.toFixed(2)}`);
   };
 
   return (
@@ -247,7 +301,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children, currentUser 
       currentUser,
       addProduct, updateProduct, deleteProduct, updateQuantity,
       addVendor, addCustomer,
-      createPurchaseOrder, receivePurchaseOrder,
+      createPurchaseOrder, updatePurchaseOrderStatus, receivePurchaseOrder, cancelPurchaseOrder,
       createSale
     }}>
       {children}
